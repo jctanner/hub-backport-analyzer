@@ -1,0 +1,7 @@
+config.sh
+github_cache.sqlite
+lib/*.pyc
+.venv
+.data
+*.swp
+__pycache__
