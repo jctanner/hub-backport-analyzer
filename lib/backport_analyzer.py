@@ -95,6 +95,9 @@ class BackportAnalyzer:
             if 'galaxy' not in pr_url and 'hub-ui' not in pr_url:
                 continue
 
+            if 'importer' in pr_url:
+                continue
+
             try:
                 pr = self.gc.get_pullrequest(pr_url)
             except Exception as e:
@@ -165,6 +168,9 @@ class BackportAnalyzer:
                 missing_branches = [x for x in backports_expected if x not in branches]
                 if not missing_branches:
                     continue
+
+            # if missing_branches:
+            #     import epdb; epdb.st()
 
             default_ds = {
                 'ikey': ikey,
