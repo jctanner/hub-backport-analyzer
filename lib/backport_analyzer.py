@@ -38,6 +38,9 @@ class BackportAnalyzer:
     errors = None
     issue_key = None
 
+    # these weren't real releases
+    ignore_fix_versions = ['4.3']
+
     def __init__(self, issue=None):
         self.issue_key = issue
         self.gc = GithubClient()
@@ -83,16 +86,20 @@ class BackportAnalyzer:
         logger.info(ikey)
         for fv in fvs:
             logger.info('\tFIXVERSION: ' + fv['name'])
-        backports_expected = [fixversion_to_backport_name(x['name']) for x in fvs]
+        backports_expected = [fixversion_to_backport_name(x['name']) for x in fvs if 'cloud' not in x['name']]
         backports_expected = [x for x in backports_expected if x]
         backports_expected = sorted(set(backports_expected))
+
+        #for ifv in self.ignore_fix_versions:
+        #    if ifv in backports_expected:
+        #        backports_expected.remove(ifv)
 
         for pr_url in pr_urls:
 
             if 'github' not in pr_url:
                 continue
 
-            if 'galaxy' not in pr_url and 'hub-ui' not in pr_url:
+            if 'galaxy_ng' not in pr_url and 'hub-ui' not in pr_url:
                 continue
 
             if 'importer' in pr_url:
@@ -159,18 +166,34 @@ class BackportAnalyzer:
             # what branches did this commit end up in?
             branches = []
             if pr.merged:
+
                 csha = pr.raw['merge_commit_sha']
                 branches = self.gc.get_commit_branches(pr.org_name, pr.repo_name, csha)
                 branches = [x.replace('stable-', '') for x in branches if x.startswith('stable-')]
                 branches.append(dev_version)
                 branches = sorted(set(branches))
+
+                """
+                _pr_branches = pr.merge_commit_branches
+                _pr_branches = [x.replace('stable-', '') for x in _pr_branches if x.startswith('stable-')]
+                _pr_branches = sorted(set(_pr_branches))
+                """
+
+                # if _pr_branches != [x for x in branches if x != '4.6']:
+                #    import epdb; epdb.st()
+
+                # What tags is this in?
+                tags = self.gc.get_commit_tags(pr.org_name, pr.repo_name, csha)
+                tags = [x for x in tags if x[0].isdigit()]
+                if tags:
+                    tag_branches = [fixversion_to_backport_name(x) for x in tags]
+                    branches.extend(tag_branches)
+                    branches = sorted(set(branches))
+
             if backports_expected and branches:
                 missing_branches = [x for x in backports_expected if x not in branches]
                 if not missing_branches:
                     continue
-
-            # if missing_branches:
-            #     import epdb; epdb.st()
 
             default_ds = {
                 'ikey': ikey,
@@ -189,6 +212,7 @@ class BackportAnalyzer:
             if pr.branch_name.startswith('stable-'):
                 blinks.append(pr.html_url)
                 blinks = sorted(set(blinks))
+
             for blink in blinks:
                 bp_pr = self.gc.get_pullrequest(blink)
                 bn = bp_pr.branch_name
@@ -206,8 +230,16 @@ class BackportAnalyzer:
                 ds['fv_marked'] = bv in backports_expected
                 bpmap[bv].append(ds)
 
+            #if missing_branches:
+            #    import epdb; epdb.st()
+            #import epdb; epdb.st()
+
             all_versions = sorted(set(backports_expected + backport_requests))
             for avs in all_versions:
+
+                if avs in self.ignore_fix_versions:
+                    continue
+
                 if avs not in bpmap:
                     if avs in backports_expected and avs != dev_version:
                         self.errors.append(
